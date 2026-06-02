@@ -1,3 +1,7 @@
+# =========================
+# TASK 3 - FEATURE ENGINEERING PIPELINE (CLEAN VERSION)
+# =========================
+
 import pandas as pd
 import numpy as np
 
@@ -6,55 +10,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.cluster import KMeans
-
 
 # =========================
-# 1. RFM TARGET CREATION
+# 1. AGGREGATE FEATURES
 # =========================
-
-class RFMTargetCreator(BaseEstimator, TransformerMixin):
-
-    def __init__(self, snapshot_date=None):
-        self.snapshot_date = snapshot_date
-
-    def fit(self, X, y=None):
-        return self
-
-    def transform(self, X):
-        df = X.copy()
-
-        df["TransactionStartTime"] = pd.to_datetime(df["TransactionStartTime"])
-
-        snapshot_date = self.snapshot_date or df["TransactionStartTime"].max()
-
-        rfm = df.groupby("CustomerId").agg(
-            Recency=("TransactionStartTime", lambda x: (snapshot_date - x.max()).days),
-            Frequency=("TransactionId", "count"),
-            Monetary=("Amount", "sum")
-        ).reset_index()
-
-        scaler = StandardScaler()
-        rfm_scaled = scaler.fit_transform(rfm[["Recency", "Frequency", "Monetary"]])
-
-        kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-        rfm["Cluster"] = kmeans.fit_predict(rfm_scaled)
-
-        cluster_summary = rfm.groupby("Cluster")[["Recency", "Frequency", "Monetary"]].mean()
-
-        high_risk_cluster = cluster_summary["Recency"].idxmax()
-
-        rfm["is_high_risk"] = (rfm["Cluster"] == high_risk_cluster).astype(int)
-
-        df = df.merge(rfm[["CustomerId", "is_high_risk"]], on="CustomerId", how="left")
-
-        return df
-
-
-# =========================
-# 2. AGGREGATE FEATURES
-# =========================
-
 class AggregateFeatures(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
@@ -63,20 +22,22 @@ class AggregateFeatures(BaseEstimator, TransformerMixin):
     def transform(self, X):
         df = X.copy()
 
-        agg = df.groupby("CustomerId")["Amount"].agg(
-            TotalTransactionAmount="sum",
-            AverageTransactionAmount="mean",
-            TransactionCount="count",
-            StdTransactionAmount="std"
-        ).reset_index()
+        if "CustomerId" in df.columns and "Amount" in df.columns:
+            agg = df.groupby("CustomerId")["Amount"].agg(
+                TotalTransactionAmount="sum",
+                AverageTransactionAmount="mean",
+                TransactionCount="count",
+                StdTransactionAmount="std"
+            ).reset_index()
 
-        return df.merge(agg, on="CustomerId", how="left")
+            df = df.merge(agg, on="CustomerId", how="left")
+
+        return df
 
 
 # =========================
-# 3. DATE FEATURES
+# 2. DATE FEATURES
 # =========================
-
 class DateFeatures(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
@@ -85,23 +46,20 @@ class DateFeatures(BaseEstimator, TransformerMixin):
     def transform(self, X):
         df = X.copy()
 
-        df["TransactionStartTime"] = pd.to_datetime(
-            df["TransactionStartTime"],
-            errors="coerce"
-        )
+        if "TransactionStartTime" in df.columns:
+            df["TransactionStartTime"] = pd.to_datetime(df["TransactionStartTime"], errors="coerce")
 
-        df["TransactionHour"] = df["TransactionStartTime"].dt.hour
-        df["TransactionDay"] = df["TransactionStartTime"].dt.day
-        df["TransactionMonth"] = df["TransactionStartTime"].dt.month
-        df["TransactionYear"] = df["TransactionStartTime"].dt.year
+            df["TransactionHour"] = df["TransactionStartTime"].dt.hour
+            df["TransactionDay"] = df["TransactionStartTime"].dt.day
+            df["TransactionMonth"] = df["TransactionStartTime"].dt.month
+            df["TransactionYear"] = df["TransactionStartTime"].dt.year
 
         return df
 
 
 # =========================
-# 4. DROP COLUMNS
+# 3. DROP COLUMNS
 # =========================
-
 class DropColumns(BaseEstimator, TransformerMixin):
 
     def __init__(self, columns):
@@ -115,38 +73,11 @@ class DropColumns(BaseEstimator, TransformerMixin):
 
 
 # =========================
-# 5. BUILD PIPELINE
+# 4. BUILD TASK 3 PIPELINE
 # =========================
+def build_pipeline():
 
-def build_pipeline(df):
-
-    df_features = df.drop(columns=["FraudResult"], errors="ignore")
-
-    numeric_features = df_features.select_dtypes(
-        include=["int64", "float64"]
-    ).columns.tolist()
-
-    categorical_features = df_features.select_dtypes(
-        include=["object"]
-    ).columns.tolist()
-
-    numeric_transformer = Pipeline(steps=[
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler())
-    ])
-
-    categorical_transformer = Pipeline(steps=[
-        ("imputer", SimpleImputer(strategy="most_frequent")),
-        ("onehot", OneHotEncoder(handle_unknown="ignore"))
-    ])
-
-    preprocessor = ColumnTransformer(transformers=[
-        ("num", numeric_transformer, numeric_features),
-        ("cat", categorical_transformer, categorical_features)
-    ])
-
-    pipeline = Pipeline(steps=[
-        ("rfm_target", RFMTargetCreator()),
+    feature_pipeline = Pipeline(steps=[
         ("aggregate", AggregateFeatures()),
         ("date_features", DateFeatures()),
         ("drop_columns", DropColumns([
@@ -155,8 +86,44 @@ def build_pipeline(df):
             "AccountId",
             "SubscriptionId",
             "TransactionStartTime"
-        ])),
-        ("preprocessor", preprocessor)
+        ]))
     ])
 
-    return pipeline
+    def full_pipeline(X):
+
+        # STEP 1: feature engineering FIRST
+        X = feature_pipeline.fit_transform(X)
+
+        # STEP 2: drop target if exists
+        if "FraudResult" in X.columns:
+            X = X.drop(columns=["FraudResult"])
+
+        # STEP 3: SAFE column detection AFTER transformation
+        num_cols = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
+        cat_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
+
+        # STEP 4: preprocessors
+        numeric_transformer = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler())
+        ])
+
+        categorical_transformer = Pipeline([
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore"))
+        ])
+
+        preprocessor = ColumnTransformer([
+            ("num", numeric_transformer, num_cols),
+            ("cat", categorical_transformer, cat_cols)
+        ])
+
+        # STEP 5: FINAL PIPELINE
+        final_pipeline = Pipeline([
+            ("feature_engineering", feature_pipeline),
+            ("preprocessor", preprocessor)
+        ])
+
+        return final_pipeline
+
+    return full_pipeline
