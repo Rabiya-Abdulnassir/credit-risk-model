@@ -6,3 +6,10 @@ jupyter
 scikit-learn
 scipy                                                                             
 xverse
+mlflow
+joblib
+xgboost
+pytest
+fastapi
+uvicorn
+flake8
