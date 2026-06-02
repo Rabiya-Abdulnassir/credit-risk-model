@@ -1,4 +1,6 @@
-# src/data_processing.py
+# =========================
+# TASK 3 - FEATURE ENGINEERING PIPELINE (CLEAN VERSION)
+# =========================
 
 import pandas as pd
 import numpy as np
@@ -9,11 +11,9 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-
 # =========================
 # 1. AGGREGATE FEATURES
 # =========================
-
 class AggregateFeatures(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
@@ -36,9 +36,8 @@ class AggregateFeatures(BaseEstimator, TransformerMixin):
 
 
 # =========================
-# 2. DATE FEATURE EXTRACTION
+# 2. DATE FEATURES
 # =========================
-
 class DateFeatures(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
@@ -48,10 +47,7 @@ class DateFeatures(BaseEstimator, TransformerMixin):
         df = X.copy()
 
         if "TransactionStartTime" in df.columns:
-            df["TransactionStartTime"] = pd.to_datetime(
-                df["TransactionStartTime"],
-                errors="coerce"
-            )
+            df["TransactionStartTime"] = pd.to_datetime(df["TransactionStartTime"], errors="coerce")
 
             df["TransactionHour"] = df["TransactionStartTime"].dt.hour
             df["TransactionDay"] = df["TransactionStartTime"].dt.day
@@ -62,9 +58,8 @@ class DateFeatures(BaseEstimator, TransformerMixin):
 
 
 # =========================
-# 3. DROP UNNEEDED COLUMNS
+# 3. DROP COLUMNS
 # =========================
-
 class DropColumns(BaseEstimator, TransformerMixin):
 
     def __init__(self, columns):
@@ -78,37 +73,11 @@ class DropColumns(BaseEstimator, TransformerMixin):
 
 
 # =========================
-# 4. BUILD PIPELINE
+# 4. BUILD TASK 3 PIPELINE
 # =========================
+def build_pipeline():
 
-def build_pipeline(df):
-
-    df_features = df.drop(columns=["FraudResult"], errors="ignore")
-
-    numeric_features = df_features.select_dtypes(
-        include=["int64", "float64"]
-    ).columns.tolist()
-
-    categorical_features = df_features.select_dtypes(
-        include=["object"]
-    ).columns.tolist()
-
-    numeric_transformer = Pipeline(steps=[
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler())
-    ])
-
-    categorical_transformer = Pipeline(steps=[
-        ("imputer", SimpleImputer(strategy="most_frequent")),
-        ("onehot", OneHotEncoder(handle_unknown="ignore"))
-    ])
-
-    preprocessor = ColumnTransformer(transformers=[
-        ("num", numeric_transformer, numeric_features),
-        ("cat", categorical_transformer, categorical_features)
-    ])
-
-    pipeline = Pipeline(steps=[
+    feature_pipeline = Pipeline(steps=[
         ("aggregate", AggregateFeatures()),
         ("date_features", DateFeatures()),
         ("drop_columns", DropColumns([
@@ -117,8 +86,44 @@ def build_pipeline(df):
             "AccountId",
             "SubscriptionId",
             "TransactionStartTime"
-        ])),
-        ("preprocessor", preprocessor)
+        ]))
     ])
 
-    return pipeline
+    def full_pipeline(X):
+
+        # STEP 1: feature engineering FIRST
+        X = feature_pipeline.fit_transform(X)
+
+        # STEP 2: drop target if exists
+        if "FraudResult" in X.columns:
+            X = X.drop(columns=["FraudResult"])
+
+        # STEP 3: SAFE column detection AFTER transformation
+        num_cols = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
+        cat_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
+
+        # STEP 4: preprocessors
+        numeric_transformer = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler())
+        ])
+
+        categorical_transformer = Pipeline([
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore"))
+        ])
+
+        preprocessor = ColumnTransformer([
+            ("num", numeric_transformer, num_cols),
+            ("cat", categorical_transformer, cat_cols)
+        ])
+
+        # STEP 5: FINAL PIPELINE
+        final_pipeline = Pipeline([
+            ("feature_engineering", feature_pipeline),
+            ("preprocessor", preprocessor)
+        ])
+
+        return final_pipeline
+
+    return full_pipeline
