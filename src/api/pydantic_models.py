@@ -1,16 +1,13 @@
 from pydantic import BaseModel
-from typing import List
 
-
-# =========================
-# INPUT SCHEMA
-# =========================
 class CustomerData(BaseModel):
-    data: List[dict]
+    age: int
+    income: float
+    loan_amount: float
+    credit_score: int
+    employment_length: int
+    home_ownership: str
+    purpose: str
 
-
-# =========================
-# OUTPUT SCHEMA
-# =========================
 class PredictionResponse(BaseModel):
-    predictions: List[float]
+    predictions: list
