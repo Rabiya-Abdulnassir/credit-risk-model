@@ -13,3 +13,7 @@ venv/
 
 # Jupyter
 .ipynb_checkpoints/
+
+mlruns/
+*.pkl
+*.joblib
