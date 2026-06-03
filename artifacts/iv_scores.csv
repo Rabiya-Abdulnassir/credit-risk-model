@@ -1,0 +1,11 @@
+feature,iv_score
+TransactionCount,4.969220231191864
+TotalTransactionAmount,0.8314886627821303
+StdTransactionAmount,0.2782565978936861
+AverageTransactionAmount,0.11670429417789692
+Amount,0.03233067107238938
+Value,0.018507773394277026
+PricingStrategy,0.003339447319653798
+FraudResult,6.248567230255387e-27
+IsWeekend,6.248567230255387e-27
+CountryCode,0.0
