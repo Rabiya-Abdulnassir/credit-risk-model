@@ -1,7 +1,11 @@
 import os
 import pandas as pd
 
-from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
+from sklearn.model_selection import (
+    train_test_split,
+    GridSearchCV,
+    RandomizedSearchCV,
+    )
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 
@@ -12,7 +16,7 @@ from sklearn.metrics import (
     f1_score,
     roc_auc_score,
     ConfusionMatrixDisplay,
-    RocCurveDisplay
+    RocCurveDisplay,
 )
 
 import matplotlib.pyplot as plt
@@ -24,7 +28,7 @@ from src.data_processing import (
     build_feature_pipeline,
     build_preprocessor,
     calculate_iv_scores,
-    export_iv_scores
+    export_iv_scores,
 )
 
 # =========================
@@ -33,6 +37,7 @@ from src.data_processing import (
 RANDOM_STATE = 42
 TARGET = "is_high_risk"
 
+os.makedirs("artifacts", exist_ok=True)
 os.makedirs("artifacts/plots", exist_ok=True)
 
 # =========================
@@ -57,11 +62,7 @@ X = df_processed.drop(columns=[TARGET])
 y = df_processed[TARGET]
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X,
-    y,
-    test_size=0.2,
-    random_state=RANDOM_STATE,
-    stratify=y
+    X, y, test_size=0.2, random_state=RANDOM_STATE, stratify=y
 )
 
 # =========================
@@ -69,8 +70,12 @@ X_train, X_test, y_train, y_test = train_test_split(
 # =========================
 drop_cols = ["CustomerId", "ProductId", "ProviderId"]
 
-X_train = X_train.drop(columns=[c for c in drop_cols if c in X_train.columns], errors="ignore")
-X_test = X_test.drop(columns=[c for c in drop_cols if c in X_test.columns], errors="ignore")
+X_train = X_train.drop(
+    columns=[c for c in drop_cols if c in X_train.columns], errors="ignore"
+)
+X_test = X_test.drop(
+    columns=[c for c in drop_cols if c in X_test.columns], errors="ignore"
+)
 
 # =========================
 # PREPROCESSING
@@ -87,7 +92,8 @@ print("Test shape:", X_test.shape)
 # IV SCORE LOGGING
 # =========================
 numeric_cols = [
-    col for col in df_processed.select_dtypes(include=["int64", "float64"]).columns
+    col
+    for col in df_processed.select_dtypes(include=["int64", "float64"]).columns
     if col != TARGET
 ]
 
@@ -95,6 +101,7 @@ iv_scores = calculate_iv_scores(df_processed, numeric_cols, TARGET)
 export_iv_scores(iv_scores)
 
 print("IV scores exported")
+
 
 # =========================
 # EVALUATION
@@ -108,12 +115,15 @@ def evaluate_model(model, X_test, y_test):
         "precision": precision_score(y_test, preds),
         "recall": recall_score(y_test, preds),
         "f1": f1_score(y_test, preds),
-        "roc_auc": roc_auc_score(y_test, probs)
+        "roc_auc": roc_auc_score(y_test, probs),
     }
+
 
 # =========================
 # ARTIFACT LOGGING
 # =========================
+
+
 def log_model_artifacts(model, X_test, y_test, name):
     cm_path = f"artifacts/plots/{name}_cm.png"
     roc_path = f"artifacts/plots/{name}_roc.png"
@@ -130,11 +140,14 @@ def log_model_artifacts(model, X_test, y_test, name):
     mlflow.log_artifact(roc_path)
     mlflow.log_artifact("artifacts/iv_scores.csv")
 
+
 # =========================
 # MLFLOW SETUP
 # =========================
-mlflow.set_experiment("credit-risk-model")
 
+
+mlflow.set_experiment("credit-risk-model")
+model = mlflow.pyfunc.load_model("models:/CreditRiskModel/None")
 best_model = None
 best_score = 0
 best_name = ""
@@ -148,12 +161,9 @@ with mlflow.start_run(run_name="LogisticRegression"):
 
     grid = GridSearchCV(
         log_model,
-        param_grid={
-            "C": [0.01, 0.1, 1, 10],
-            "solver": ["liblinear"]
-        },
+        param_grid={"C": [0.01, 0.1, 1, 10], "solver": ["liblinear"]},
         cv=5,
-        scoring="roc_auc"
+        scoring="roc_auc",
     )
 
     grid.fit(X_train, y_train)
@@ -163,11 +173,10 @@ with mlflow.start_run(run_name="LogisticRegression"):
 
     mlflow.log_params(grid.best_params_)
     mlflow.log_metrics(metrics)
-
     mlflow.sklearn.log_model(
         sk_model=best_log,
-        name="model",
-        registered_model_name="CreditRiskModel"
+        name="logistic_model",
+        registered_model_name="CreditRiskModel",
     )
 
     log_model_artifacts(best_log, X_test, y_test, "logistic")
@@ -188,12 +197,12 @@ with mlflow.start_run(run_name="RandomForest"):
         rf,
         param_distributions={
             "n_estimators": [100, 200, 300],
-            "max_depth": [5, 10, 20, None]
+            "max_depth": [5, 10, 20, None],
         },
         n_iter=10,
         cv=3,
         scoring="roc_auc",
-        random_state=RANDOM_STATE
+        random_state=RANDOM_STATE,
     )
 
     search.fit(X_train, y_train)
@@ -203,11 +212,10 @@ with mlflow.start_run(run_name="RandomForest"):
 
     mlflow.log_params(search.best_params_)
     mlflow.log_metrics(metrics)
-
     mlflow.sklearn.log_model(
         sk_model=best_rf,
-        name="model",
-        registered_model_name="CreditRiskModel"
+        name="random_forest_model",
+        registered_model_name="CreditRiskModel",
     )
 
     log_model_artifacts(best_rf, X_test, y_test, "random_forest")
@@ -220,5 +228,6 @@ with mlflow.start_run(run_name="RandomForest"):
 # =========================
 # FINAL RESULT
 # =========================
+
 print("\nBest Model:", best_name)
 print("Best ROC-AUC:", best_score)

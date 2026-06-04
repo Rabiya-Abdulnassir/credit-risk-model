@@ -171,13 +171,13 @@ class RFMTargetCreator(BaseEstimator, TransformerMixin):
 
 # fallback if too small dataset
         if n_clusters < 2:
-           rfm["Cluster"] = 0
+            rfm["Cluster"] = 0
         else:
-           kmeans = KMeans(
-            n_clusters=n_clusters,
-            random_state=self.random_state,
-            n_init=10
-            )
+            kmeans = KMeans(
+                n_clusters=n_clusters,
+                random_state=self.random_state,
+                n_init=10
+                )
         rfm["Cluster"] = kmeans.fit_predict(rfm_scaled)
         rfm["Cluster"] = kmeans.fit_predict(
             rfm_scaled
