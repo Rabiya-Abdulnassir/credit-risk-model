@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+
 class CustomerData(BaseModel):
     age: int
     income: float
@@ -8,6 +9,7 @@ class CustomerData(BaseModel):
     employment_length: int
     home_ownership: str
     purpose: str
+
 
 class PredictionResponse(BaseModel):
     predictions: list
